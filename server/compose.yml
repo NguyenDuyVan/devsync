@@ -1,0 +1,27 @@
+name: devsync
+
+services:
+  devsync:
+    build: .
+    image: devsync-server:latest
+    container_name: devsync
+    restart: unless-stopped
+    ports:
+      - "8743:8743"
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?set PUBLIC_HOST}
+      MAX_BLOB_MB: ${MAX_BLOB_MB:-100}
+    volumes:
+      - ./data:/data
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

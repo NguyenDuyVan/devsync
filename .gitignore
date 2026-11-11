@@ -1,0 +1,5 @@
+node_modules/
+out/
+*.vsix
+server/data/
+.DS_Store
