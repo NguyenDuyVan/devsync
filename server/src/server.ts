@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { BLOB_DIR, TLS_DIR, consumePairCode, createDevice, createPairCode, db, nextSeq, sha256 } from './db.ts';
+import { BLOB_DIR, DATA_DIR, TLS_DIR, consumePairCode, createDevice, createPairCode, db, nextSeq, sha256 } from './db.ts';
 
 const PORT = Number(process.env.PORT ?? 8743);
 const MAX_BLOB_BYTES = Number(process.env.MAX_BLOB_MB ?? 100) * 1024 * 1024;
@@ -11,6 +11,9 @@ const MAX_JSON_BYTES = 1024 * 1024;
 const HISTORY_KEEP_VERSIONS = 20;
 const HISTORY_KEEP_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const RELEASE_DIR = join(DATA_DIR, 'releases');
+const RELEASE_FILE = /^devsync-\d+\.\d+\.\d+\.vsix$/;
 
 const HEX64 = /^[a-f0-9]{64}$/;
 const ENTRY_ID = /^[a-f0-9]{16,64}$/;
@@ -142,8 +145,27 @@ async function storeBlob(req: IncomingMessage, hash: string) {
 
 const streams = new Set<ServerResponse>();
 
-function broadcast(seq: number) {
-  for (const res of streams) res.write(`event: seq\ndata: ${seq}\n\n`);
+function broadcast(seq: number, event = 'seq') {
+  for (const res of streams) res.write(`event: ${event}\ndata: ${seq}\n\n`);
+}
+
+function latestRelease(): { version: string; file: string } | undefined {
+  try {
+    return JSON.parse(readFileSync(join(RELEASE_DIR, 'latest.json'), 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+let releaseMtime = 0;
+function watchReleases() {
+  try {
+    const mtime = statSync(join(RELEASE_DIR, 'latest.json')).mtimeMs;
+    if (releaseMtime && mtime !== releaseMtime) broadcast(0, 'release');
+    releaseMtime = mtime;
+  } catch {
+    releaseMtime = releaseMtime || -1;
+  }
 }
 
 interface EntryRow {
@@ -306,6 +328,20 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     return sendJson(res, 200, { versions: rows.map((row) => toEntry({ ...row, seq: 0 })) });
   }
 
+  if (method === 'GET' && url.pathname === '/release/latest') {
+    const release = latestRelease();
+    if (!release) throw new HttpError(404, 'no release');
+    return sendJson(res, 200, release);
+  }
+
+  if (method === 'GET' && parts[0] === 'release' && parts[1] === 'file' && parts.length === 3 && RELEASE_FILE.test(parts[2])) {
+    const path = join(RELEASE_DIR, parts[2]);
+    if (!existsSync(path)) throw new HttpError(404, 'release file not found');
+    res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': statSync(path).size });
+    createReadStream(path).pipe(res);
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/devices') {
     const rows = db.prepare('SELECT id, name, created_at, last_seen FROM devices WHERE revoked = 0 ORDER BY created_at').all();
     return sendJson(res, 200, { devices: rows });
@@ -364,3 +400,5 @@ createServer(tls, (req, res) => {
 
 cleanup();
 setInterval(cleanup, DAY_MS);
+watchReleases();
+setInterval(watchReleases, 30_000);

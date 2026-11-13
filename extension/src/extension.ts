@@ -10,6 +10,7 @@ import { Matcher, moveToTrash, writeAtomic } from './files';
 import { applyWip, currentHead, projectIdForRemote, remoteOf } from './git';
 import { GLOBAL_PROJECT_ID, defaultModes, globalProject, itemById, itemsFor, type ItemDef } from './items';
 import { Leader, Store, type Mode, type ProjectState, type State } from './state';
+import { fetchUpdate } from './updater';
 import { DevicesTree, MODE_LABEL, ProjectsTree, relativeTime, type DeviceNode, type ProjectNode } from './tree';
 
 type Direction = 'up' | 'down' | 'both';
@@ -96,9 +97,10 @@ class Controller implements vscode.Disposable {
   private startBackground() {
     this.log('Cửa sổ này phụ trách đồng bộ nền.');
     this.stopEvents = this.engine.api?.subscribe(
-      (seq) => {
+      (event, data) => {
         this.live = true;
-        if (seq > this.store.read().lastSeq) this.schedule('remote', 3_000, () => this.runAuto());
+        if (event === 'seq' && Number(data) > this.store.read().lastSeq) this.schedule('remote', 3_000, () => this.runAuto());
+        if (event === 'release') this.schedule('update', 2_000, () => this.checkUpdate(false));
       },
       (connected) => {
         this.live = connected;
@@ -107,6 +109,32 @@ class Controller implements vscode.Disposable {
     );
     this.resetInterval();
     this.schedule('startup', 4_000, () => this.runAuto());
+    this.schedule('update', 15_000, () => this.checkUpdate(false));
+  }
+
+  private async checkUpdate(interactive: boolean) {
+    if (!this.engine.api) return;
+    if (!interactive && !this.config<boolean>('autoUpdate', true)) return;
+    const current = this.context.extension.packageJSON.version as string;
+    try {
+      const update = await fetchUpdate(this.engine.api, current, path.join(this.context.globalStorageUri.fsPath, 'updates'));
+      if (!update) {
+        if (interactive) void vscode.window.showInformationMessage(`DevSync đang ở bản mới nhất (${current}).`);
+        return;
+      }
+      if (!interactive && this.context.globalState.get('devsync.installedUpdate') === update.release.version) return;
+      await vscode.commands.executeCommand('workbench.extensions.installExtension', vscode.Uri.file(update.vsix));
+      await this.context.globalState.update('devsync.installedUpdate', update.release.version);
+      this.log(`Đã cài bản ${update.release.version}${update.release.notes ? `: ${update.release.notes}` : ''}`);
+      const pick = await vscode.window.showInformationMessage(
+        `DevSync đã cập nhật lên ${update.release.version}${update.release.notes ? ` — ${update.release.notes}` : ''}. Tải lại cửa sổ để dùng bản mới.`,
+        'Tải lại',
+      );
+      if (pick) await vscode.commands.executeCommand('workbench.action.reloadWindow');
+    } catch (error) {
+      this.log(`Cập nhật thất bại: ${(error as Error).message}`);
+      if (interactive) void vscode.window.showErrorMessage(`DevSync: ${(error as Error).message}`);
+    }
   }
 
   private stopBackground() {
@@ -119,7 +147,10 @@ class Controller implements vscode.Disposable {
 
   private resetInterval() {
     if (this.interval) clearInterval(this.interval);
-    this.interval = setInterval(() => void this.runAuto(), Math.max(1, this.config<number>('intervalMinutes', 15)) * 60_000);
+    this.interval = setInterval(() => {
+      void this.runAuto();
+      void this.checkUpdate(false);
+    }, Math.max(1, this.config<number>('intervalMinutes', 15)) * 60_000);
   }
 
   private schedule(key: string, delay: number, task: () => Promise<unknown>) {
@@ -237,8 +268,22 @@ class Controller implements vscode.Disposable {
     for (const line of report.pushed) this.log(`↑ ${line}`);
     for (const line of report.pulled) this.log(`↓ ${line}`);
     for (const line of report.deleted) this.log(`✕ ${line}`);
+    for (const line of report.merged) this.log(`⇄ Gộp ${line}`);
+    for (const line of report.annotated) this.log(`⇄ Gộp có ghi chú phân biệt máy ${line}`);
     for (const line of report.skipped) this.log(`Bỏ qua ${line}`);
     for (const line of report.errors) this.log(`Lỗi ${line}`);
+    if (report.annotated.length) {
+      void vscode.window
+        .showInformationMessage(
+          `DevSync: ${report.annotated.length} file được sửa trên cả hai máy. Đã giữ nội dung của cả hai, chỗ khác nhau có ghi chú tên máy.`,
+          'Xem',
+        )
+        .then((pick) => {
+          if (!pick) return;
+          const review = Object.values(this.store.read().reviews)[0];
+          if (review) void this.openReview(review.id);
+        });
+    }
     const fresh = report.conflicts.filter((c) => !this.notifiedConflicts.has(c));
     for (const line of report.conflicts) {
       this.log(`⚠ Xung đột ${line}`);
@@ -326,6 +371,9 @@ class Controller implements vscode.Disposable {
     this.register('devsync.revokeDevice', (node: DeviceNode) => this.revokeDevice(node));
     this.register('devsync.refresh', () => this.refresh());
     this.register('devsync.showLog', () => this.output.show());
+    this.register('devsync.checkUpdate', () => this.checkUpdate(true));
+    this.register('devsync.openReview', (node: ProjectNode) => node.kind === 'review' && this.openReview(node.review.id));
+    this.register('devsync.dismissReview', (node: ProjectNode) => node.kind === 'review' && this.dismissReview(node.review.id));
   }
 
   private requireConnected() {
@@ -858,6 +906,19 @@ class Controller implements vscode.Disposable {
     });
     this.notifiedConflicts.clear();
     this.log(`Đã xử lý xung đột ${conflict.path}: ${pick.choice === 'local' ? 'giữ bản máy này' : remoteLabel.toLowerCase()}.`);
+  }
+
+  private async openReview(id: string) {
+    const review = this.store.read().reviews[id];
+    if (!review) return;
+    if (fs.existsSync(review.abs)) await vscode.window.showTextDocument(vscode.Uri.file(review.abs));
+    if (review.notes.length) void vscode.window.showInformationMessage(`DevSync: ${review.notes.join(' | ')}`, { modal: !review.hasMarkers });
+  }
+
+  private async dismissReview(id: string) {
+    await this.store.update((state) => {
+      delete state.reviews[id];
+    });
   }
 
   private async revokeDevice(node: DeviceNode) {

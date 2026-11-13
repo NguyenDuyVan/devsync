@@ -28,7 +28,9 @@ Chế độ: **Tự động** đẩy sau khi file ổn định 45 giây, kéo ng
 | Vấn đề | Cách xử lý |
 |---|---|
 | Đường dẫn dự án khác nhau giữa các máy | Nhận diện dự án theo `git remote origin`; thư mục bộ nhớ Claude được tính lại theo đường dẫn của từng máy |
-| Hai máy cùng sửa | Mỗi bản ghi có version; server từ chối ghi đè (409). Extension đánh dấu xung đột và mở diff để chọn |
+| Hai máy cùng sửa | Gộp kiểu outer join: giữ thay đổi của cả hai máy. Gộp 3 chiều dựa trên bản chung gần nhất lấy từ lịch sử server; chỗ hai máy sửa khác nhau được giữ cả hai kèm ghi chú `DevSync · <tên máy> · <thời gian>` |
+| Định dạng ghi chú | Văn bản: khối `<<<<<<<`/`=======`/`>>>>>>>` (VS Code hiện nút chọn nhanh). `.env`: giữ giá trị máy này, giá trị máy kia thành dòng `# DevSync · …`. JSON: gộp theo key, mảng hợp nhất, giá trị đơn khác nhau giữ bản máy này và ghi vào mục cần xem lại. `MEMORY.md`, `*.jsonl`: hợp nhất dòng. File nhị phân: giữ cả hai file |
+| Mục cần xem lại | File gộp có ghi chú hiện trong cây dự án; tự biến mất khi xoá hết dấu `DevSync ·` |
 | Xoá file | Lan sang máy khác; bản trên máy nhận được chuyển vào thùng rác của extension |
 | Nhiều cửa sổ VS Code | Chỉ một cửa sổ chạy đồng bộ nền; các thao tác dùng chung file khoá |
 | Lịch sử | Server giữ tối thiểu 20 phiên bản gần nhất hoặc 30 ngày, khôi phục được từng file |
@@ -49,12 +51,22 @@ Lệnh quản trị: `admin.ts invite | devices | revoke <id> | fingerprint`.
 
 ```bash
 cd extension && pnpm install --ignore-workspace && pnpm run package
-code --install-extension devsync-0.1.0.vsix
+code --install-extension devsync-<version>.vsix
 ```
 
 1. Máy đầu tiên: `DevSync: Kết nối máy chủ`, dán chuỗi `devsync://…` lấy từ lệnh `invite`. Extension tạo khoá đồng bộ: **lưu khoá vào trình quản lý mật khẩu**, mất khoá thì không đọc lại được dữ liệu.
 2. Máy tiếp theo: trên máy đã kết nối, bấm biểu tượng thêm người ở khung Thiết bị (`Tạo mã ghép thiết bị mới`). Chuỗi được sao chép đã kèm khoá; dán vào máy mới.
 3. Thêm dự án bằng nút `+` ở khung Dự án. Máy kia mở cùng repo sẽ được gợi ý liên kết.
+
+## Phát hành và tự cập nhật
+
+```bash
+cd extension && node scripts/release.mjs patch --notes "mô tả ngắn"
+```
+
+Script tăng version, đóng gói, ký Ed25519 bằng `~/.devsync/release-key.pem` rồi đưa lên server. Các máy đang mở VS Code nhận sự kiện realtime, xác minh chữ ký với public key gắn trong extension rồi tự cài; cửa sổ hỏi tải lại để dùng bản mới. Bản không có chữ ký hợp lệ bị bỏ qua, nên VPS bị xâm nhập cũng không đẩy được code lạ. Tắt bằng `devsync.autoUpdate`.
+
+Khoá ký chỉ nằm trên máy phát hành: sao lưu `~/.devsync/release-key.pem` vào trình quản lý mật khẩu.
 
 ## Bàn giao
 

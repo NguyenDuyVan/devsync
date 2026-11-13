@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ApiClient, ApiError, fetchPinnedCert, parseInvite, type DeviceInfo, type RawEntry, type ServerInfo } from './api';
 import { Vault, sha256 } from './crypto';
-import { Matcher, envKeyDiff, localHash, moveToTrash, scan, unionLines, writeAtomic, type LocalFile } from './files';
+import { Matcher, envKeyDiff, localHash, moveToTrash, scan, writeAtomic, type LocalFile } from './files';
+import { MARKER, mergeContents } from './merge';
 import { createWip, type WipPackage } from './git';
 import { itemById, itemsFor, type ItemDef } from './items';
 import type { EntryMeta, FileMeta, HandoffMeta, ProjectMeta, ProjectState, RemoteEntry, State, Store } from './state';
@@ -22,12 +23,14 @@ export interface Report {
   pushed: string[];
   pulled: string[];
   deleted: string[];
+  merged: string[];
+  annotated: string[];
   conflicts: string[];
   skipped: string[];
   errors: string[];
 }
 
-export const emptyReport = (): Report => ({ pushed: [], pulled: [], deleted: [], conflicts: [], skipped: [], errors: [] });
+export const emptyReport = (): Report => ({ pushed: [], pulled: [], deleted: [], merged: [], annotated: [], conflicts: [], skipped: [], errors: [] });
 
 export function mergeReports(target: Report, source: Report) {
   for (const key of Object.keys(target) as (keyof Report)[]) target[key].push(...source[key]);
@@ -261,8 +264,9 @@ export class Engine {
       if (!remoteChanged && !localChanged) continue;
       if (remoteChanged && !localChanged) actions.push(action(remoteFile!.deleted ? 'down-delete' : 'down-write'));
       else if (!remoteChanged && localChanged) actions.push(action(file ? 'up-write' : 'up-delete'));
-      else if (file && !remoteFile!.deleted && item.mergeStrategy?.(rel) === 'union-lines') actions.push(action('merge'));
-      else actions.push(action('conflict'));
+      else if (file && remoteFile!.deleted) actions.push(action('up-write'));
+      else if (!file) actions.push(action('down-write'));
+      else actions.push(action('merge'));
     }
     this.pending.set(`${project.id}/${item.id}`, {
       up: actions.filter((a) => a.kind.startsWith('up-')).length,
@@ -295,15 +299,9 @@ export class Engine {
             await this.pushLocal(state, project, item, action.rel, action.abs, action.remote?.version ?? 0);
             report.pushed.push(action.kind === 'up-delete' ? `${label} (xoá)` : label);
             break;
-          case 'merge': {
-            const remoteText = (await this.download(action.remote!)).toString('utf8');
-            const merged = unionLines(fs.readFileSync(action.abs, 'utf8'), remoteText);
-            writeAtomic(action.abs, Buffer.from(merged));
-            this.setBase(state, project, item, action.rel, action.remote!);
-            await this.pushLocal(state, project, item, action.rel, action.abs, action.remote!.version);
-            report.pulled.push(`${label} (đã gộp)`);
+          case 'merge':
+            await this.mergeBoth(state, project, item, action, label, report);
             break;
-          }
           case 'conflict':
             this.markConflict(state, project, item, action);
             report.conflicts.push(label);
@@ -311,11 +309,76 @@ export class Engine {
         }
       } catch (error) {
         if (error instanceof VersionConflict) {
-          this.markConflict(state, project, item, { ...action, remote: state.remote[action.id] });
-          report.conflicts.push(label);
+          report.skipped.push(`${label} (máy khác vừa cập nhật, sẽ gộp ở lần đồng bộ sau)`);
         } else {
           report.errors.push(`${label}: ${(error as Error).message}`);
         }
+      }
+    }
+  }
+
+  private async baseContent(state: State, id: string): Promise<Buffer | undefined> {
+    const base = state.base[id];
+    if (!base) return undefined;
+    try {
+      const version = (await this.history(id)).find((v) => v.version === base.version && !v.deleted && v.blob);
+      return version ? await this.download(version) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async mergeBoth(state: State, project: ProjectState, item: ItemDef, action: Action, label: string, report: Report) {
+    const remote = action.remote!;
+    const remoteMeta = remote.meta as FileMeta;
+    const stamp = (at: number) => new Date(at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const localLabel = `${state.deviceName ?? 'máy này'} · ${stamp(fs.statSync(action.abs).mtimeMs)}`;
+    const remoteLabel = `${remoteMeta.deviceName || 'máy khác'} · ${stamp(remote.updatedAt)}`;
+    const result = mergeContents({
+      rel: action.rel,
+      base: await this.baseContent(state, action.id),
+      local: fs.readFileSync(action.abs),
+      remote: await this.download(remote),
+      strategy: item.mergeStrategy?.(action.rel),
+      localLabel,
+      remoteLabel,
+    });
+
+    if (result.binary) {
+      const ext = path.posix.extname(action.rel);
+      const copyRel = `${action.rel.slice(0, action.rel.length - ext.length)} (DevSync ${remoteMeta.deviceName || 'máy khác'})${ext}`;
+      const copyAbs = path.join(path.dirname(action.abs), path.posix.basename(copyRel));
+      writeAtomic(copyAbs, await this.download(remote));
+      const copyId = this.entryIdFor(project, item, copyRel);
+      await this.pushLocal(state, project, item, copyRel, copyAbs, state.remote[copyId]?.version ?? 0);
+      await this.pushLocal(state, project, item, action.rel, action.abs, remote.version);
+      this.addReview(state, project, item, action, [`Bản của ${remoteLabel} được lưu thành ${copyRel}`], false);
+      report.annotated.push(`${label} (file nhị phân, giữ cả hai bản)`);
+      return;
+    }
+
+    writeAtomic(action.abs, result.data);
+    this.setBase(state, project, item, action.rel, remote);
+    await this.pushLocal(state, project, item, action.rel, action.abs, remote.version);
+    if (result.annotated) {
+      this.addReview(state, project, item, action, result.notes, result.notes.length === 0);
+      report.annotated.push(label);
+    } else {
+      report.merged.push(label);
+    }
+  }
+
+  private addReview(state: State, project: ProjectState, item: ItemDef, action: Action, notes: string[], hasMarkers: boolean) {
+    state.reviews[action.id] = { id: action.id, projectId: project.id, item: item.id, path: action.rel, abs: action.abs, notes, hasMarkers, at: Date.now() };
+  }
+
+  pruneReviews(state: State) {
+    for (const [id, review] of Object.entries(state.reviews)) {
+      if (!review.hasMarkers) continue;
+      try {
+        if (!fs.readFileSync(review.abs, 'utf8').includes(MARKER)) delete state.reviews[id];
+      } catch {
+        delete state.reviews[id];
       }
     }
   }
@@ -422,6 +485,7 @@ export class Engine {
   }
 
   refreshPending(state: State) {
+    this.pruneReviews(state);
     for (const project of Object.values(state.projects)) {
       if (!project.localPath) continue;
       for (const item of itemsFor(project)) {

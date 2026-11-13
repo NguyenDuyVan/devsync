@@ -3,3 +3,4 @@ out/
 *.vsix
 server/data/
 .DS_Store
+latest.json

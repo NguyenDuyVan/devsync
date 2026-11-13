@@ -2,7 +2,7 @@
   "name": "devsync",
   "displayName": "DevSync",
   "description": "Đồng bộ bộ nhớ Claude, env, code dở và cấu hình giữa các máy qua máy chủ riêng, mã hoá đầu-cuối.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "nguyenduyvan",
   "license": "UNLICENSED",
   "private": true,
@@ -51,53 +51,251 @@
       }
     ],
     "commands": [
-      { "command": "devsync.connect", "title": "Kết nối máy chủ", "category": "DevSync" },
-      { "command": "devsync.invite", "title": "Tạo mã ghép thiết bị mới", "category": "DevSync", "icon": "$(person-add)" },
-      { "command": "devsync.showKey", "title": "Sao chép khoá đồng bộ", "category": "DevSync" },
-      { "command": "devsync.addProject", "title": "Thêm dự án", "category": "DevSync", "icon": "$(add)" },
-      { "command": "devsync.linkProject", "title": "Liên kết thư mục trên máy này", "category": "DevSync", "icon": "$(link)" },
-      { "command": "devsync.unlinkProject", "title": "Ngừng đồng bộ trên máy này", "category": "DevSync" },
-      { "command": "devsync.syncNow", "title": "Đồng bộ ngay (các mục tự động)", "category": "DevSync", "icon": "$(sync)" },
-      { "command": "devsync.syncProject", "title": "Đồng bộ dự án", "category": "DevSync", "icon": "$(sync)" },
-      { "command": "devsync.pushItem", "title": "Đẩy lên", "category": "DevSync", "icon": "$(cloud-upload)" },
-      { "command": "devsync.pullItem", "title": "Kéo về", "category": "DevSync", "icon": "$(cloud-download)" },
-      { "command": "devsync.setMode", "title": "Chế độ đồng bộ", "category": "DevSync", "icon": "$(settings-gear)" },
-      { "command": "devsync.handoff", "title": "Bàn giao sang máy khác", "category": "DevSync", "icon": "$(export)" },
-      { "command": "devsync.applyWip", "title": "Áp code dở từ máy khác", "category": "DevSync", "icon": "$(git-pull-request-go-to-changes)" },
-      { "command": "devsync.history", "title": "Lịch sử phiên bản", "category": "DevSync", "icon": "$(history)" },
-      { "command": "devsync.resolveConflict", "title": "Xử lý xung đột", "category": "DevSync", "icon": "$(diff)" },
-      { "command": "devsync.revokeDevice", "title": "Thu hồi thiết bị", "category": "DevSync", "icon": "$(trash)" },
-      { "command": "devsync.refresh", "title": "Làm mới", "category": "DevSync", "icon": "$(refresh)" },
-      { "command": "devsync.showLog", "title": "Xem nhật ký", "category": "DevSync", "icon": "$(output)" }
+      {
+        "command": "devsync.connect",
+        "title": "Kết nối máy chủ",
+        "category": "DevSync"
+      },
+      {
+        "command": "devsync.invite",
+        "title": "Tạo mã ghép thiết bị mới",
+        "category": "DevSync",
+        "icon": "$(person-add)"
+      },
+      {
+        "command": "devsync.showKey",
+        "title": "Sao chép khoá đồng bộ",
+        "category": "DevSync"
+      },
+      {
+        "command": "devsync.addProject",
+        "title": "Thêm dự án",
+        "category": "DevSync",
+        "icon": "$(add)"
+      },
+      {
+        "command": "devsync.linkProject",
+        "title": "Liên kết thư mục trên máy này",
+        "category": "DevSync",
+        "icon": "$(link)"
+      },
+      {
+        "command": "devsync.unlinkProject",
+        "title": "Ngừng đồng bộ trên máy này",
+        "category": "DevSync"
+      },
+      {
+        "command": "devsync.syncNow",
+        "title": "Đồng bộ ngay (các mục tự động)",
+        "category": "DevSync",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "devsync.syncProject",
+        "title": "Đồng bộ dự án",
+        "category": "DevSync",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "devsync.pushItem",
+        "title": "Đẩy lên",
+        "category": "DevSync",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "devsync.pullItem",
+        "title": "Kéo về",
+        "category": "DevSync",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "devsync.setMode",
+        "title": "Chế độ đồng bộ",
+        "category": "DevSync",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "devsync.handoff",
+        "title": "Bàn giao sang máy khác",
+        "category": "DevSync",
+        "icon": "$(export)"
+      },
+      {
+        "command": "devsync.applyWip",
+        "title": "Áp code dở từ máy khác",
+        "category": "DevSync",
+        "icon": "$(git-pull-request-go-to-changes)"
+      },
+      {
+        "command": "devsync.history",
+        "title": "Lịch sử phiên bản",
+        "category": "DevSync",
+        "icon": "$(history)"
+      },
+      {
+        "command": "devsync.resolveConflict",
+        "title": "Xử lý xung đột",
+        "category": "DevSync",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "devsync.revokeDevice",
+        "title": "Thu hồi thiết bị",
+        "category": "DevSync",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "devsync.refresh",
+        "title": "Làm mới",
+        "category": "DevSync",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "devsync.showLog",
+        "title": "Xem nhật ký",
+        "category": "DevSync",
+        "icon": "$(output)"
+      },
+      {
+        "command": "devsync.checkUpdate",
+        "title": "Kiểm tra cập nhật",
+        "category": "DevSync"
+      },
+      {
+        "command": "devsync.openReview",
+        "title": "Mở file đã gộp",
+        "category": "DevSync"
+      },
+      {
+        "command": "devsync.dismissReview",
+        "title": "Đã xem",
+        "category": "DevSync",
+        "icon": "$(check)"
+      }
     ],
     "menus": {
       "view/title": [
-        { "command": "devsync.addProject", "when": "view == devsync.projects && devsync.connected", "group": "navigation@1" },
-        { "command": "devsync.syncNow", "when": "view == devsync.projects && devsync.connected", "group": "navigation@2" },
-        { "command": "devsync.refresh", "when": "view == devsync.projects", "group": "navigation@3" },
-        { "command": "devsync.showLog", "when": "view == devsync.projects", "group": "navigation@4" },
-        { "command": "devsync.invite", "when": "view == devsync.devices && devsync.connected", "group": "navigation@1" }
+        {
+          "command": "devsync.addProject",
+          "when": "view == devsync.projects && devsync.connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "devsync.syncNow",
+          "when": "view == devsync.projects && devsync.connected",
+          "group": "navigation@2"
+        },
+        {
+          "command": "devsync.refresh",
+          "when": "view == devsync.projects",
+          "group": "navigation@3"
+        },
+        {
+          "command": "devsync.showLog",
+          "when": "view == devsync.projects",
+          "group": "navigation@4"
+        },
+        {
+          "command": "devsync.invite",
+          "when": "view == devsync.devices && devsync.connected",
+          "group": "navigation@1"
+        }
       ],
       "view/item/context": [
-        { "command": "devsync.syncProject", "when": "view == devsync.projects && viewItem == project.linked", "group": "inline@1" },
-        { "command": "devsync.handoff", "when": "view == devsync.projects && viewItem == project.linked", "group": "inline@2" },
-        { "command": "devsync.unlinkProject", "when": "view == devsync.projects && viewItem == project.linked", "group": "1_manage" },
-        { "command": "devsync.linkProject", "when": "view == devsync.projects && viewItem == project.unlinked", "group": "inline@1" },
-        { "command": "devsync.pushItem", "when": "view == devsync.projects && viewItem =~ /^item\\./", "group": "inline@1" },
-        { "command": "devsync.pullItem", "when": "view == devsync.projects && viewItem =~ /^item\\.files/", "group": "inline@2" },
-        { "command": "devsync.applyWip", "when": "view == devsync.projects && viewItem =~ /^item\\.wip/", "group": "inline@2" },
-        { "command": "devsync.setMode", "when": "view == devsync.projects && viewItem =~ /^item\\./", "group": "inline@3" },
-        { "command": "devsync.history", "when": "view == devsync.projects && viewItem =~ /^item\\.files/", "group": "1_manage" },
-        { "command": "devsync.resolveConflict", "when": "view == devsync.projects && viewItem == conflict", "group": "inline@1" },
-        { "command": "devsync.revokeDevice", "when": "view == devsync.devices && viewItem == device.other", "group": "inline@1" }
+        {
+          "command": "devsync.syncProject",
+          "when": "view == devsync.projects && viewItem == project.linked",
+          "group": "inline@1"
+        },
+        {
+          "command": "devsync.handoff",
+          "when": "view == devsync.projects && viewItem == project.linked",
+          "group": "inline@2"
+        },
+        {
+          "command": "devsync.unlinkProject",
+          "when": "view == devsync.projects && viewItem == project.linked",
+          "group": "1_manage"
+        },
+        {
+          "command": "devsync.linkProject",
+          "when": "view == devsync.projects && viewItem == project.unlinked",
+          "group": "inline@1"
+        },
+        {
+          "command": "devsync.pushItem",
+          "when": "view == devsync.projects && viewItem =~ /^item\\./",
+          "group": "inline@1"
+        },
+        {
+          "command": "devsync.pullItem",
+          "when": "view == devsync.projects && viewItem =~ /^item\\.files/",
+          "group": "inline@2"
+        },
+        {
+          "command": "devsync.applyWip",
+          "when": "view == devsync.projects && viewItem =~ /^item\\.wip/",
+          "group": "inline@2"
+        },
+        {
+          "command": "devsync.setMode",
+          "when": "view == devsync.projects && viewItem =~ /^item\\./",
+          "group": "inline@3"
+        },
+        {
+          "command": "devsync.history",
+          "when": "view == devsync.projects && viewItem =~ /^item\\.files/",
+          "group": "1_manage"
+        },
+        {
+          "command": "devsync.resolveConflict",
+          "when": "view == devsync.projects && viewItem == conflict",
+          "group": "inline@1"
+        },
+        {
+          "command": "devsync.revokeDevice",
+          "when": "view == devsync.devices && viewItem == device.other",
+          "group": "inline@1"
+        },
+        {
+          "command": "devsync.dismissReview",
+          "when": "view == devsync.projects && viewItem == review",
+          "group": "inline@1"
+        }
       ],
       "commandPalette": [
-        { "command": "devsync.pushItem", "when": "false" },
-        { "command": "devsync.pullItem", "when": "false" },
-        { "command": "devsync.setMode", "when": "false" },
-        { "command": "devsync.resolveConflict", "when": "false" },
-        { "command": "devsync.revokeDevice", "when": "false" },
-        { "command": "devsync.unlinkProject", "when": "false" }
+        {
+          "command": "devsync.pushItem",
+          "when": "false"
+        },
+        {
+          "command": "devsync.pullItem",
+          "when": "false"
+        },
+        {
+          "command": "devsync.setMode",
+          "when": "false"
+        },
+        {
+          "command": "devsync.resolveConflict",
+          "when": "false"
+        },
+        {
+          "command": "devsync.revokeDevice",
+          "when": "false"
+        },
+        {
+          "command": "devsync.unlinkProject",
+          "when": "false"
+        },
+        {
+          "command": "devsync.openReview",
+          "when": "false"
+        },
+        {
+          "command": "devsync.dismissReview",
+          "when": "false"
+        }
       ]
     },
     "configuration": {
@@ -124,6 +322,11 @@
           "type": "string",
           "default": "",
           "description": "Tên thiết bị hiển thị cho máy khác. Để trống sẽ dùng hostname."
+        },
+        "devsync.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Tự cài bản DevSync mới (đã được ký) khi có trên máy chủ."
         }
       }
     }
@@ -131,7 +334,8 @@
   "scripts": {
     "build": "tsc -p .",
     "watch": "tsc -p . --watch",
-    "package": "tsc -p . && vsce package --no-dependencies --allow-missing-repository --skip-license"
+    "package": "tsc -p . && vsce package --no-dependencies --allow-missing-repository --skip-license",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

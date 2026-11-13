@@ -6,9 +6,10 @@ import { sha256 } from './crypto';
 
 const MAX_UNTRACKED_BYTES = 5 * 1024 * 1024;
 
-function git(cwd: string, args: string[], allowExit1 = false): Promise<string> {
+function git(cwd: string, args: string[], allowExit1 = false, env?: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('git', args, { cwd, maxBuffer: 200 * 1024 * 1024 }, (error, stdout, stderr) => {
+    const options = { cwd, maxBuffer: 200 * 1024 * 1024, env: env ? { ...process.env, ...env } : process.env };
+    execFile('git', args, options, (error, stdout, stderr) => {
       if (!error || (allowExit1 && (error as NodeJS.ErrnoException & { code?: number }).code === 1)) resolve(stdout);
       else reject(new Error(stderr.trim() || error.message));
     });
@@ -49,22 +50,27 @@ export interface WipPackage {
 export async function createWip(cwd: string, excluded: (rel: string) => boolean): Promise<WipPackage> {
   const branch = (await git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
   const head = (await git(cwd, ['rev-parse', 'HEAD'])).trim();
-  let patch = await git(cwd, ['diff', '--binary', 'HEAD']);
   const skipped: string[] = [];
   const untracked = (await git(cwd, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean);
+  const included: string[] = [];
   for (const file of untracked) {
-    if (excluded(file)) {
-      skipped.push(`${file} (env, đồng bộ qua mục riêng)`);
-      continue;
-    }
-    const size = fs.statSync(path.join(cwd, file)).size;
-    if (size > MAX_UNTRACKED_BYTES) {
-      skipped.push(`${file} (file mới > 5MB)`);
-      continue;
-    }
-    patch += await git(cwd, ['diff', '--binary', '--no-index', '--', '/dev/null', file], true);
+    if (excluded(file)) skipped.push(`${file} (env, đồng bộ qua mục riêng)`);
+    else if (fs.statSync(path.join(cwd, file)).size > MAX_UNTRACKED_BYTES) skipped.push(`${file} (file mới > 5MB)`);
+    else included.push(file);
   }
-  return { branch, head, patch, skipped, createdAt: Date.now() };
+
+  const realIndex = path.resolve(cwd, (await git(cwd, ['rev-parse', '--git-path', 'index'])).trim());
+  const tempIndex = path.join(os.tmpdir(), `devsync-index-${process.pid}-${Date.now()}`);
+  if (fs.existsSync(realIndex)) fs.copyFileSync(realIndex, tempIndex);
+  const env = { GIT_INDEX_FILE: tempIndex };
+  try {
+    await git(cwd, ['add', '-u'], false, env);
+    for (let i = 0; i < included.length; i += 200) await git(cwd, ['add', '--', ...included.slice(i, i + 200)], false, env);
+    const patch = await git(cwd, ['diff', '--cached', '--binary', 'HEAD'], false, env);
+    return { branch, head, patch, skipped, createdAt: Date.now() };
+  } finally {
+    fs.rmSync(tempIndex, { force: true });
+  }
 }
 
 export async function currentHead(cwd: string): Promise<{ branch: string; head: string }> {

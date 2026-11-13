@@ -3,12 +3,13 @@ import * as vscode from 'vscode';
 import type { DeviceInfo } from './api';
 import type { Engine } from './engine';
 import { itemsFor, type ItemDef } from './items';
-import type { Conflict, Mode, ProjectState, Store } from './state';
+import type { Conflict, Mode, ProjectState, Review, Store } from './state';
 
 export type ProjectNode =
   | { kind: 'project'; project: ProjectState }
   | { kind: 'item'; project: ProjectState; item: ItemDef }
-  | { kind: 'conflict'; project: ProjectState; conflict: Conflict };
+  | { kind: 'conflict'; project: ProjectState; conflict: Conflict }
+  | { kind: 'review'; project: ProjectState; review: Review };
 
 export type DeviceNode = { kind: 'device'; device: DeviceInfo; self: boolean };
 
@@ -54,8 +55,10 @@ export class ProjectsTree implements vscode.TreeDataProvider<ProjectNode> {
     if (node.kind !== 'project' || !node.project.localPath) return [];
     const project = state.projects[node.project.id] ?? node.project;
     const conflicts = Object.values(state.conflicts).filter((c) => c.projectId === project.id);
+    const reviews = Object.values(state.reviews).filter((r) => r.projectId === project.id);
     return [
       ...conflicts.map((conflict): ProjectNode => ({ kind: 'conflict', project, conflict })),
+      ...reviews.map((review): ProjectNode => ({ kind: 'review', project, review })),
       ...itemsFor(project).map((item): ProjectNode => ({ kind: 'item', project, item })),
     ];
   }
@@ -70,6 +73,17 @@ export class ProjectsTree implements vscode.TreeDataProvider<ProjectNode> {
       tree.tooltip = project.remote ?? project.localPath ?? project.name;
       tree.iconPath = new vscode.ThemeIcon(project.global ? 'settings' : linked ? 'repo' : 'cloud');
       tree.contextValue = linked ? 'project.linked' : 'project.unlinked';
+      return tree;
+    }
+    if (node.kind === 'review') {
+      const { review } = node;
+      const tree = new vscode.TreeItem(review.path);
+      tree.id = `review:${review.id}`;
+      tree.description = review.hasMarkers ? 'đã gộp từ 2 máy, có ghi chú cần xem' : 'đã gộp từ 2 máy';
+      tree.tooltip = review.notes.length ? review.notes.join('\n') : 'Tìm "DevSync ·" trong file để xem chỗ khác nhau giữa các máy. Mục này tự biến mất khi hết ghi chú.';
+      tree.iconPath = new vscode.ThemeIcon('git-merge', new vscode.ThemeColor('list.warningForeground'));
+      tree.contextValue = 'review';
+      tree.command = { command: 'devsync.openReview', title: 'Mở file', arguments: [node] };
       return tree;
     }
     if (node.kind === 'conflict') {

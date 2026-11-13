@@ -74,6 +74,17 @@ export interface Conflict {
   at: number;
 }
 
+export interface Review {
+  id: string;
+  projectId: string;
+  item: string;
+  path: string;
+  abs: string;
+  notes: string[];
+  hasMarkers: boolean;
+  at: number;
+}
+
 export interface State {
   server?: ServerInfo;
   deviceId?: string;
@@ -85,10 +96,11 @@ export interface State {
   base: Record<string, BaseEntry>;
   remote: Record<string, RemoteEntry>;
   conflicts: Record<string, Conflict>;
+  reviews: Record<string, Review>;
   seenHandoff: Record<string, number>;
 }
 
-const emptyState = (): State => ({ lastSeq: 0, projects: {}, base: {}, remote: {}, conflicts: {}, seenHandoff: {} });
+const emptyState = (): State => ({ lastSeq: 0, projects: {}, base: {}, remote: {}, conflicts: {}, reviews: {}, seenHandoff: {} });
 
 const LOCK_STALE_MS = 120_000;
 const LOCK_WAIT_MS = 90_000;

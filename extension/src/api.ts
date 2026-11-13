@@ -127,12 +127,16 @@ export class ApiClient {
   }
 
   async getBlob(hash: string): Promise<Buffer> {
-    const res = await this.request('GET', `/blobs/${hash}`);
+    return this.getFile(`/blobs/${hash}`);
+  }
+
+  async getFile(filePath: string): Promise<Buffer> {
+    const res = await this.request('GET', filePath);
     if (res.status >= 400) throw new ApiError(res.status, JSON.parse(res.body.toString('utf8') || '{}'));
     return res.body;
   }
 
-  subscribe(onSeq: (seq: number) => void, onState: (connected: boolean) => void): () => void {
+  subscribe(onEvent: (event: string, data: string) => void, onState: (connected: boolean) => void): () => void {
     let stopped = false;
     let current: IncomingMessage | undefined;
     let retry = 1_000;
@@ -159,8 +163,10 @@ export class ApiClient {
           while ((index = buffer.indexOf('\n\n')) >= 0) {
             const block = buffer.slice(0, index);
             buffer = buffer.slice(index + 2);
-            const data = block.split('\n').find((line) => line.startsWith('data: '));
-            if (data) onSeq(Number(data.slice(6)));
+            const lines = block.split('\n');
+            const event = lines.find((line) => line.startsWith('event: '))?.slice(7) ?? 'message';
+            const data = lines.find((line) => line.startsWith('data: '));
+            if (data) onEvent(event, data.slice(6));
           }
         });
         res.on('close', () => {

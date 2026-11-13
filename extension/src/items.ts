@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import type { MergeStrategy } from './merge';
 import type { Mode, ProjectState } from './state';
 
 export type ItemKind = 'files' | 'wip';
@@ -17,7 +18,7 @@ export interface ItemDef {
   include: string[];
   exclude?: string[];
   root?(project: ProjectState): string | undefined;
-  mergeStrategy?(relPath: string): 'union-lines' | undefined;
+  mergeStrategy?(relPath: string): MergeStrategy | undefined;
 }
 
 export const GLOBAL_PROJECT_ID = 'global';
@@ -81,6 +82,7 @@ export const ITEMS: ItemDef[] = [
     include: ['**/.env', '**/.env.*', '**/*.env'],
     exclude: ['**/*.example', '**/*.sample', '**/*.template', '**/env.example/**'],
     root: (p) => p.localPath,
+    mergeStrategy: () => 'env',
   },
   {
     id: 'wip',
