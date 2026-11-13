@@ -50,7 +50,7 @@ Lệnh quản trị: `admin.ts invite | devices | revoke <id> | fingerprint`.
 ## Cài extension
 
 ```bash
-cd extension && pnpm install --ignore-workspace && pnpm run package
+cd extension && pnpm install && npx tsc -p . && npx vsce package --no-dependencies --allow-missing-repository --skip-license
 code --install-extension devsync-<version>.vsix
 ```
 
